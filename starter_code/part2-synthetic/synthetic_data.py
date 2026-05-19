@@ -125,20 +125,150 @@ def generate_fake(mu, logvar, no_samples, scaler, model):
 
 # When you have all the code in place to generate synthetic data, uncomment the code below to run the model and the tests. 
 def main():
-    # Get a device and set up data paths. You need paths for the original data, the data with just loan status = 1 and the new augmented dataset.
 
-    # Split the data out with loan status = 1
+    # Original dataset path
+    ORIGINAL_DATA_PATH = 'data/loan_continuous.csv'
 
-    # Create DataLoaders for training and validation 
+    # Load original dataset
+    data = pd.read_csv(ORIGINAL_DATA_PATH)
 
-    # Train and validate the model 
+    # Split data with Loan Status = 1
+    denied_loans = data[data['Loan Status'] == 1]
 
-    #scaler = trainloader.dataset.standardizer
-    #fake_data = generate_fake(mu, logvar, 50000, scaler, model)
+    # Save denied loans temporarily
+    denied_loans.to_csv(
+        'data/denied_loans.csv',
+        index=False
+    )
 
-    # Combine the new data with original dataset
+    # Create DataLoaders
+    trainloader = DataLoader(
+        DataBuilder(
+            'data/denied_loans.csv',
+            train=True
+        ),
+        batch_size=64,
+        shuffle=True
+    )
 
+    valloader = DataLoader(
+        DataBuilder(
+            'data/denied_loans.csv',
+            train=False
+        ),
+        batch_size=64,
+        shuffle=False
+    )
+
+    # Get input dimensions
+    D_in = denied_loans.shape[1]
+
+    # Initialize model
+    model = Autoencoder(D_in)
+
+    # Optimizer
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=1e-3
+    )
+
+    # Loss function
+    loss_mse = CustomLoss()
+
+    epochs = 500
+
+    # Training loop
+    for epoch in range(epochs):
+
+        model.train()
+
+        train_loss = 0
+
+        for data_batch in trainloader:
+
+            data_batch = data_batch.float()
+
+            optimizer.zero_grad()
+
+            recon_batch, mu, logvar = model(data_batch)
+
+            loss = loss_mse(
+                recon_batch,
+                data_batch,
+                mu,
+                logvar
+            )
+
+            loss.backward()
+
+            train_loss += loss.item()
+
+            optimizer.step()
+
+        # Validation
+        model.eval()
+
+        val_loss = 0
+
+        with torch.no_grad():
+
+            for val_batch in valloader:
+
+                val_batch = val_batch.float()
+
+                recon_batch, mu, logvar = model(val_batch)
+
+                loss = loss_mse(
+                    recon_batch,
+                    val_batch,
+                    mu,
+                    logvar
+                )
+
+                val_loss += loss.item()
+
+        if epoch % 50 == 0:
+
+            print(
+                f"Epoch {epoch} | "
+                f"Train Loss: {train_loss:.4f} | "
+                f"Val Loss: {val_loss:.4f}"
+            )
+
+    # Generate synthetic data
+    scaler = trainloader.dataset.standardizer
+
+    fake_data = generate_fake(
+        mu,
+        logvar,
+        50000,
+        scaler,
+        model
+    )
+
+    # Convert synthetic data to dataframe
+    fake_df = pd.DataFrame(
+        fake_data,
+        columns=data.columns
+    )
+
+    # Combine with original dataset
+    augmented_data = pd.concat(
+        [data, fake_df],
+        ignore_index=True
+    )
+
+    # Save augmented dataset
+    augmented_data.to_csv(
+        'data/loan_continuous_expanded.csv',
+        index=False
+    )
+
+    print("Synthetic data generated successfully!")
+
+    # Test model on augmented dataset
     DATA_PATH = 'data/loan_continuous_expanded.csv'
+
     test_model(DATA_PATH)
 
 if __name__ == '__main__':

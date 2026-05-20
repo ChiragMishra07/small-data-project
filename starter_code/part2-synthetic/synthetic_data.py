@@ -129,10 +129,21 @@ def main():
     # Original dataset path
     ORIGINAL_DATA_PATH = 'data/loan_continuous.csv'
 
-    # Load original dataset
+    # ==========================================
+    # BEFORE SYNTHETIC DATA
+    # ==========================================
+
+    print("\n========== BEFORE SYNTHETIC DATA ==========\n")
+
+    test_model(ORIGINAL_DATA_PATH)
+
+    # ==========================================
+    # LOAD DATA
+    # ==========================================
+
     data = pd.read_csv(ORIGINAL_DATA_PATH)
 
-    # Split data with Loan Status = 1
+    # Keep only denied loans
     denied_loans = data[data['Loan Status'] == 1]
 
     # Save denied loans temporarily
@@ -141,7 +152,10 @@ def main():
         index=False
     )
 
-    # Create DataLoaders
+    # ==========================================
+    # CREATE DATALOADERS
+    # ==========================================
+
     trainloader = DataLoader(
         DataBuilder(
             'data/denied_loans.csv',
@@ -160,24 +174,29 @@ def main():
         shuffle=False
     )
 
-    # Get input dimensions
+    # ==========================================
+    # MODEL
+    # ==========================================
+
     D_in = denied_loans.shape[1]
 
-    # Initialize model
     model = Autoencoder(D_in)
 
-    # Optimizer
     optimizer = optim.Adam(
         model.parameters(),
         lr=1e-3
     )
 
-    # Loss function
     loss_mse = CustomLoss()
 
-    epochs = 500
+    # ==========================================
+    # TRAINING
+    # ==========================================
 
-    # Training loop
+    epochs = 50
+
+    print("\n========== TRAINING STARTED ==========\n")
+
     for epoch in range(epochs):
 
         model.train()
@@ -227,7 +246,8 @@ def main():
 
                 val_loss += loss.item()
 
-        if epoch % 50 == 0:
+        # Print every 10 epochs
+        if epoch % 10 == 0:
 
             print(
                 f"Epoch {epoch} | "
@@ -235,13 +255,18 @@ def main():
                 f"Val Loss: {val_loss:.4f}"
             )
 
-    # Generate synthetic data
+    # ==========================================
+    # GENERATE SYNTHETIC DATA
+    # ==========================================
+
+    print("\n========== GENERATING SYNTHETIC DATA ==========\n")
+
     scaler = trainloader.dataset.standardizer
 
     fake_data = generate_fake(
         mu,
         logvar,
-        50000,
+        5000,
         scaler,
         model
     )
@@ -252,25 +277,35 @@ def main():
         columns=data.columns
     )
 
-    # Combine with original dataset
+    # Combine original + fake data
     augmented_data = pd.concat(
         [data, fake_df],
         ignore_index=True
     )
 
-    # Save augmented dataset
+    # Save expanded dataset
     augmented_data.to_csv(
         'data/loan_continuous_expanded.csv',
         index=False
     )
 
-    print("Synthetic data generated successfully!")
+    print("\nSynthetic data generated successfully!\n")
 
-    # Test model on augmented dataset
+    # ==========================================
+    # AFTER SYNTHETIC DATA
+    # ==========================================
+
     DATA_PATH = 'data/loan_continuous_expanded.csv'
+
+    print("\n========== AFTER SYNTHETIC DATA ==========\n")
 
     test_model(DATA_PATH)
 
+    print("\n========== PROCESS COMPLETE ==========\n")
+
+
 if __name__ == '__main__':
+
     main()
+
     print("done")
